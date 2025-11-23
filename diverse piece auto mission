@@ -1,0 +1,347 @@
+-- // Services \\ --
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
+
+-- // Settings \\ --
+local Settings = {
+    Distance = 8,           -- Distance above enemy
+    AutoFarm = false,       -- Toggle
+    SwitchDelay = 2.3,      -- Tool Switch Speed (Updated)
+    QuestPos = Vector3.new(14, 162, -29) -- Quest Giver Location
+}
+
+-- // Lists \\ --
+-- High Priority: Kills these instantly, ignores quests if these are alive
+local PriorityBosses = {
+    "One-Eyed Owl",
+    "Ken Kaneki",
+    "Kishou Arima"
+}
+
+-- Mission Map: Links the Mission Name to the Boss Name
+local MissionList = {
+    {Name = "Mission Cid Kagenou",   Target = "Cid Kagenou"},
+    {Name = "Mission Turbo Granny",  Target = "Turbo Granny"},
+    {Name = "Mission Rudo Surebrec", Target = "Rudo Surebrec"},
+    {Name = "Mission Ichigo Kurosaki", Target = "Ichigo Kurosaki"},
+    {Name = "Mission Satoru Gojo",   Target = "Satoru Gojo"},
+    {Name = "Mission Ryomen Sukuna", Target = "Ryomen Sukuna"},
+    {Name = "Mission Sosuke Aizen",  Target = "Sosuke Aizen"}
+}
+
+-- // Variables \\ --
+local LocalPlayer = Players.LocalPlayer
+local CurrentTarget = nil
+local CurrentMissionName = nil -- Tracks which mission we are currently doing
+
+-- // UI Creation \\ --
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DiverseSmartFarm"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- 1. Open Button
+local OpenBtn = Instance.new("TextButton")
+OpenBtn.Size = UDim2.new(0, 45, 0, 45)
+OpenBtn.Position = UDim2.new(0, 15, 0.4, 0)
+OpenBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 255)
+OpenBtn.Text = "OP"
+OpenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+OpenBtn.Font = Enum.Font.GothamBold
+OpenBtn.Visible = false
+OpenBtn.Parent = ScreenGui
+local OpenCorner = Instance.new("UICorner")
+OpenCorner.CornerRadius = UDim.new(0, 8)
+OpenCorner.Parent = OpenBtn
+
+-- 2. Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 200, 0, 270)
+MainFrame.Position = UDim2.new(0.5, -100, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 10)
+UICorner.Parent = MainFrame
+
+-- 3. Header & Status
+local Title = Instance.new("TextLabel")
+Title.Text = "SMART DIVERSE FARM"
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 13
+Title.Parent = MainFrame
+
+local StatusLbl = Instance.new("TextLabel")
+StatusLbl.Text = "Status: IDLE"
+StatusLbl.Size = UDim2.new(1, 0, 0, 20)
+StatusLbl.Position = UDim2.new(0, 0, 0, 35)
+StatusLbl.BackgroundTransparency = 1
+StatusLbl.TextColor3 = Color3.fromRGB(150, 150, 150)
+StatusLbl.Font = Enum.Font.Gotham
+StatusLbl.TextSize = 10
+StatusLbl.TextWrapped = true
+StatusLbl.Parent = MainFrame
+
+-- 4. Logic Helper Functions
+local function PressKey(key)
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, key, false, game)
+        task.wait()
+        VirtualInputManager:SendKeyEvent(false, key, false, game)
+    end)
+end
+
+-- 5. Toggle Button
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 180, 0, 40)
+ToggleBtn.Position = UDim2.new(0, 10, 0, 65)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+ToggleBtn.Text = "START FARM"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.TextSize = 15
+ToggleBtn.Parent = MainFrame
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    Settings.AutoFarm = not Settings.AutoFarm
+    if Settings.AutoFarm then
+        ToggleBtn.Text = "STOP FARM"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+    else
+        ToggleBtn.Text = "START FARM"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+        StatusLbl.Text = "IDLE"
+        CurrentTarget = nil
+        CurrentMissionName = nil
+    end
+end)
+
+-- 6. Distance Controls
+local DistLabel = Instance.new("TextLabel")
+DistLabel.Text = "Dist:"
+DistLabel.Size = UDim2.new(0, 60, 0, 25)
+DistLabel.Position = UDim2.new(0, 10, 0, 120)
+DistLabel.BackgroundTransparency = 1
+DistLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+DistLabel.TextXAlignment = Enum.TextXAlignment.Left
+DistLabel.Parent = MainFrame
+
+local DistInput = Instance.new("TextBox")
+DistInput.Size = UDim2.new(0, 50, 0, 25)
+DistInput.Position = UDim2.new(0, 60, 0, 120)
+DistInput.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+DistInput.Text = tostring(Settings.Distance)
+DistInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+DistInput.Parent = MainFrame
+
+local SetDistBtn = Instance.new("TextButton")
+SetDistBtn.Size = UDim2.new(0, 50, 0, 25)
+SetDistBtn.Position = UDim2.new(0, 130, 0, 120)
+SetDistBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 100)
+SetDistBtn.Text = "SET"
+SetDistBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SetDistBtn.Parent = MainFrame
+
+SetDistBtn.MouseButton1Click:Connect(function()
+    local num = tonumber(DistInput.Text)
+    if num then
+        Settings.Distance = num
+        SetDistBtn.Text = "OK"
+        task.delay(0.5, function() if SetDistBtn.Parent then SetDistBtn.Text = "SET" end end)
+    end
+end)
+
+-- 7. Footer Buttons
+local HideBtn = Instance.new("TextButton")
+HideBtn.Size = UDim2.new(0, 85, 0, 30)
+HideBtn.Position = UDim2.new(0, 10, 0, 220)
+HideBtn.BackgroundColor3 = Color3.fromRGB(200, 140, 0)
+HideBtn.Text = "Hide"
+HideBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+HideBtn.Parent = MainFrame
+
+HideBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    OpenBtn.Visible = true
+end)
+
+OpenBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = true
+    OpenBtn.Visible = false
+end)
+
+local DelBtn = Instance.new("TextButton")
+DelBtn.Size = UDim2.new(0, 85, 0, 30)
+DelBtn.Position = UDim2.new(0, 105, 0, 220)
+DelBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+DelBtn.Text = "Close"
+DelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+DelBtn.Parent = MainFrame
+
+DelBtn.MouseButton1Click:Connect(function()
+    Settings.AutoFarm = false
+    ScreenGui:Destroy()
+end)
+
+-- // Farm Logic Functions \\ --
+
+local function FindEnemyByName(nameKey)
+    local Enemies = workspace:FindFirstChild("Enemies")
+    if not Enemies then return nil end
+    -- Check exact matches or partial matches
+    for _, child in pairs(Enemies:GetChildren()) do
+        if child:IsA("Model") and string.find(child.Name, nameKey) and child:FindFirstChild("Humanoid") and child.Humanoid.Health > 0 then
+            return child
+        end
+    end
+    return nil
+end
+
+local function GetSmartTarget()
+    -- 1. Check Priority Bosses (Instant Kill, No Mission Needed)
+    for _, bossName in ipairs(PriorityBosses) do
+        local boss = FindEnemyByName(bossName)
+        if boss then 
+            return boss, "Priority", nil 
+        end
+    end
+
+    -- 2. Check Mission Bosses (Only if they are ALIVE)
+    for _, missionData in ipairs(MissionList) do
+        local boss = FindEnemyByName(missionData.Target)
+        if boss then
+            -- Boss is alive, this is the mission we want
+            return boss, "Mission", missionData.Name
+        end
+    end
+
+    return nil, "None", nil
+end
+
+local function AcceptMission(missionName)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+    StatusLbl.Text = "Taking Quest: " .. missionName
+    
+    -- TP to Quest Giver
+    char.HumanoidRootPart.CFrame = CFrame.new(Settings.QuestPos)
+    char.HumanoidRootPart.Velocity = Vector3.zero
+    
+    task.wait(0.5) -- Wait to arrive
+
+    -- Invoke Server to take mission
+    local args = { [1] = "Mission", [2] = missionName }
+    pcall(function() ReplicatedStorage.Remotes.Functions.Input:InvokeServer(unpack(args)) end)
+    
+    CurrentMissionName = missionName
+    task.wait(1) -- Delay to let mission accept
+end
+
+-- // Loops \\ --
+
+-- Teleport Loop
+RunService.Heartbeat:Connect(function()
+    if not Settings.AutoFarm then return end
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    
+    -- Teleport if Target Exists
+    if CurrentTarget and CurrentTarget:FindFirstChild("HumanoidRootPart") then
+        local targetCF = CurrentTarget.HumanoidRootPart.CFrame
+        -- Look Down (-90)
+        local newCF = targetCF * CFrame.new(0, Settings.Distance, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+        char.HumanoidRootPart.CFrame = newCF
+        char.HumanoidRootPart.Velocity = Vector3.zero
+        char.HumanoidRootPart.RotVelocity = Vector3.zero
+    end
+end)
+
+-- Main Logic Loop
+task.spawn(function()
+    while true do
+        if Settings.AutoFarm then
+            local boss, type, missionName = GetSmartTarget()
+
+            if boss then
+                -- Check if we need to take a mission
+                if type == "Mission" and CurrentMissionName ~= missionName then
+                    CurrentTarget = nil -- Pause Targeting
+                    AcceptMission(missionName) -- Go take quest
+                end
+
+                -- Now set the target to kill
+                CurrentTarget = boss
+                StatusLbl.Text = "Killing: " .. boss.Name
+                StatusLbl.TextColor3 = Color3.fromRGB(255, 100, 100)
+                
+                -- Wait until dead or stopped
+                repeat 
+                    task.wait() 
+                until not boss or not boss.Parent or boss.Humanoid.Health <= 0 or not Settings.AutoFarm
+                
+                -- Cleanup
+                CurrentTarget = nil
+                if type == "Mission" then 
+                    CurrentMissionName = nil -- Reset mission state so we check again
+                end
+            else
+                -- No bosses found
+                CurrentTarget = nil
+                StatusLbl.Text = "Waiting for Spawns..."
+                StatusLbl.TextColor3 = Color3.fromRGB(255, 255, 0)
+            end
+        else
+            StatusLbl.Text = "Status: IDLE"
+            StatusLbl.TextColor3 = Color3.fromRGB(150, 150, 150)
+        end
+        task.wait(0.5)
+    end
+end)
+
+-- Attack Loop
+task.spawn(function()
+    while true do
+        if Settings.AutoFarm and CurrentTarget then
+            pcall(function()
+                VirtualInputManager:SendMouseButtonEvent(999999, 999999, 0, true, game, 1)
+                VirtualInputManager:SendMouseButtonEvent(999999, 999999, 0, false, game, 1)
+            end)
+            local skills = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
+            for _, key in ipairs(skills) do PressKey(key) end
+        end
+        task.wait()
+    end
+end)
+
+-- Switch Tool Loop (2.3s Delay)
+task.spawn(function()
+    while true do
+        if Settings.AutoFarm and CurrentTarget then
+            PressKey(Enum.KeyCode.Two)
+            task.wait(Settings.SwitchDelay) -- 2.3s
+            PressKey(Enum.KeyCode.Three)
+            task.wait(Settings.SwitchDelay) -- 2.3s
+        else
+            task.wait(0.5)
+        end
+    end
+end)
+
+-- Notify
+pcall(function()
+    StarterGui:SetCore("SendNotification", {
+        Title = "Script Loaded",
+        Text = "Smart Farm Ready",
+        Duration = 3
+    })
+end)
