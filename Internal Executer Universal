@@ -1,0 +1,368 @@
+-- // Ultimate Mobile Executor (Scroll + Drag + History) \\ --
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- // Variables \\ --
+local HistoryData = {} 
+local IsHistoryView = false
+
+-- // UI Creation \\ --
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "UltimateExecutor"
+ScreenGui.ResetOnSpawn = false
+
+-- Safe Parent
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+-- // 1. Draggable Open Button \\ --
+local OpenBtn = Instance.new("TextButton")
+OpenBtn.Name = "OpenButton"
+OpenBtn.Size = UDim2.new(0, 50, 0, 50)
+OpenBtn.Position = UDim2.new(0, 10, 0.4, 0)
+OpenBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 255)
+OpenBtn.Text = "EXE"
+OpenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+OpenBtn.Font = Enum.Font.GothamBold
+OpenBtn.Visible = false 
+OpenBtn.Parent = ScreenGui
+local OCorn = Instance.new("UICorner"); OCorn.CornerRadius = UDim.new(0, 25); OCorn.Parent = OpenBtn
+
+-- Custom Drag Function (Mobile Friendly)
+local function MakeDraggable(gui)
+    local dragging, dragInput, dragStart, startPos
+    gui.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = gui.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    gui.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            gui.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+MakeDraggable(OpenBtn)
+
+-- // 2. Main Frame \\ --
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 340, 0, 300)
+MainFrame.Position = UDim2.new(0.5, -170, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true -- Main frame is also draggable
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 10)
+UICorner.Parent = MainFrame
+
+-- Header
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 35)
+Header.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+Header.Parent = MainFrame
+local HCorn = Instance.new("UICorner"); HCorn.CornerRadius = UDim.new(0, 10); HCorn.Parent = Header
+
+local Title = Instance.new("TextLabel")
+Title.Text = "Ultimate Exec"
+Title.Size = UDim2.new(0.5, 0, 1, 0)
+Title.Position = UDim2.new(0.05, 0, 0, 0)
+Title.BackgroundTransparency = 1
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 14
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
+
+-- Window Controls
+local HideBtn = Instance.new("TextButton")
+HideBtn.Size = UDim2.new(0, 50, 1, 0)
+HideBtn.Position = UDim2.new(1, -90, 0, 0)
+HideBtn.BackgroundTransparency = 1
+HideBtn.Text = "HIDE"
+HideBtn.TextColor3 = Color3.fromRGB(100, 200, 255)
+HideBtn.Font = Enum.Font.GothamBold
+HideBtn.Parent = Header
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 40, 1, 0)
+CloseBtn.Position = UDim2.new(1, -40, 0, 0)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = Header
+
+-- Tab Switcher
+local TabFrame = Instance.new("Frame")
+TabFrame.Size = UDim2.new(1, -20, 0, 30)
+TabFrame.Position = UDim2.new(0, 10, 0, 40)
+TabFrame.BackgroundTransparency = 1
+TabFrame.Parent = MainFrame
+
+local EditorTabBtn = Instance.new("TextButton")
+EditorTabBtn.Size = UDim2.new(0.48, 0, 1, 0)
+EditorTabBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+EditorTabBtn.Text = "CODE EDITOR"
+EditorTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+EditorTabBtn.Font = Enum.Font.GothamBold
+EditorTabBtn.TextSize = 11
+EditorTabBtn.Parent = TabFrame
+local ECorn = Instance.new("UICorner"); ECorn.Parent = EditorTabBtn
+
+local HistoryTabBtn = Instance.new("TextButton")
+HistoryTabBtn.Size = UDim2.new(0.48, 0, 1, 0)
+HistoryTabBtn.Position = UDim2.new(0.52, 0, 0, 0)
+HistoryTabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+HistoryTabBtn.Text = "HISTORY"
+HistoryTabBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+HistoryTabBtn.Font = Enum.Font.GothamBold
+HistoryTabBtn.TextSize = 11
+HistoryTabBtn.Parent = TabFrame
+local HCorn = Instance.new("UICorner"); HCorn.Parent = HistoryTabBtn
+
+-- // EDITOR TAB (X & Y SCROLLING) \\ --
+local EditorContainer = Instance.new("Frame")
+EditorContainer.Size = UDim2.new(1, -20, 1, -125)
+EditorContainer.Position = UDim2.new(0, 10, 0, 80)
+EditorContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+EditorContainer.Parent = MainFrame
+
+-- The Scrolling Frame
+local EditorScroll = Instance.new("ScrollingFrame")
+EditorScroll.Size = UDim2.new(1, 0, 1, 0)
+EditorScroll.CanvasSize = UDim2.new(0, 0, 0, 0) -- Auto sets later
+EditorScroll.AutomaticCanvasSize = Enum.AutomaticSize.XY -- Enables X and Y expansion
+EditorScroll.ScrollBarThickness = 6
+EditorScroll.BackgroundTransparency = 1
+EditorScroll.Parent = EditorContainer
+
+-- The Input Box
+local InputBox = Instance.new("TextBox")
+InputBox.Size = UDim2.new(1, 0, 1, 0) 
+InputBox.AutomaticSize = Enum.AutomaticSize.XY -- Expands as you type
+InputBox.BackgroundTransparency = 1
+InputBox.TextColor3 = Color3.fromRGB(200, 200, 200)
+InputBox.TextXAlignment = Enum.TextXAlignment.Left
+InputBox.TextYAlignment = Enum.TextYAlignment.Top
+InputBox.Font = Enum.Font.Code
+InputBox.TextSize = 13
+InputBox.MultiLine = true
+InputBox.ClearTextOnFocus = false
+InputBox.TextWrapped = false -- CRITICAL for X Scrolling
+InputBox.Text = "-- Paste Script Here"
+InputBox.Parent = EditorScroll
+
+-- Padding for text
+local UIPadding = Instance.new("UIPadding")
+UIPadding.PaddingLeft = UDim.new(0, 5)
+UIPadding.PaddingTop = UDim.new(0, 5)
+UIPadding.Parent = InputBox
+
+-- // HISTORY TAB (Vertical Scroll + Clear) \\ --
+local HistoryFrame = Instance.new("ScrollingFrame")
+HistoryFrame.Size = UDim2.new(1, -20, 1, -130)
+HistoryFrame.Position = UDim2.new(0, 10, 0, 80)
+HistoryFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+HistoryFrame.ScrollBarThickness = 4
+HistoryFrame.Visible = false
+HistoryFrame.Parent = MainFrame
+
+local HistoryList = Instance.new("UIListLayout")
+HistoryList.Padding = UDim.new(0, 5)
+HistoryList.SortOrder = Enum.SortOrder.LayoutOrder
+HistoryList.Parent = HistoryFrame
+
+-- Clear Logs Button (Inside History Tab)
+local ClearLogsBtn = Instance.new("TextButton")
+ClearLogsBtn.Size = UDim2.new(1, -20, 0, 25)
+ClearLogsBtn.Position = UDim2.new(0, 10, 1, -40)
+ClearLogsBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+ClearLogsBtn.Text = "DELETE ALL HISTORY"
+ClearLogsBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ClearLogsBtn.Font = Enum.Font.GothamBold
+ClearLogsBtn.Visible = false -- Only shows in History Tab
+ClearLogsBtn.Parent = MainFrame
+local CC = Instance.new("UICorner"); CC.Parent = ClearLogsBtn
+
+-- // BOTTOM CONTROLS \\ --
+local ButtonContainer = Instance.new("Frame")
+ButtonContainer.Size = UDim2.new(1, -20, 0, 35)
+ButtonContainer.Position = UDim2.new(0, 10, 1, -45)
+ButtonContainer.BackgroundTransparency = 1
+ButtonContainer.Parent = MainFrame
+
+local ExecuteBtn = Instance.new("TextButton")
+ExecuteBtn.Size = UDim2.new(0.3, 0, 1, 0)
+ExecuteBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+ExecuteBtn.Text = "RUN"
+ExecuteBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ExecuteBtn.Font = Enum.Font.GothamBold
+ExecuteBtn.Parent = ButtonContainer
+local BC1 = Instance.new("UICorner"); BC1.Parent = ExecuteBtn
+
+local SpamBtn = Instance.new("TextButton")
+SpamBtn.Size = UDim2.new(0.3, 0, 1, 0)
+SpamBtn.Position = UDim2.new(0.35, 0, 0, 0)
+SpamBtn.BackgroundColor3 = Color3.fromRGB(180, 100, 0)
+SpamBtn.Text = "RUN 10x"
+SpamBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpamBtn.Font = Enum.Font.GothamBold
+SpamBtn.Parent = ButtonContainer
+local BC2 = Instance.new("UICorner"); BC2.Parent = SpamBtn
+
+local ClearTxtBtn = Instance.new("TextButton")
+ClearTxtBtn.Size = UDim2.new(0.3, 0, 1, 0)
+ClearTxtBtn.Position = UDim2.new(0.7, 0, 0, 0)
+ClearTxtBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+ClearTxtBtn.Text = "CLEAR TXT"
+ClearTxtBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ClearTxtBtn.Font = Enum.Font.GothamBold
+ClearTxtBtn.Parent = ButtonContainer
+local BC3 = Instance.new("UICorner"); BC3.Parent = ClearTxtBtn
+
+-- // LOGIC \\ --
+
+-- Keyboard Fix (Slide Up)
+InputBox.Focused:Connect(function()
+    MainFrame:TweenPosition(UDim2.new(0.5, -170, 0.05, 0), "Out", "Quad", 0.3)
+end)
+
+InputBox.FocusLost:Connect(function()
+    MainFrame:TweenPosition(UDim2.new(0.5, -170, 0.3, 0), "Out", "Quad", 0.3)
+end)
+
+-- History Function
+local function AddHistory(code)
+    if code == "" or (HistoryData[1] and HistoryData[1] == code) then return end
+    table.insert(HistoryData, 1, code)
+
+    -- Create Button
+    local Entry = Instance.new("TextButton")
+    Entry.Size = UDim2.new(1, 0, 0, 60) -- Taller for multi-line view
+    Entry.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+    Entry.Text = code -- Show full code
+    Entry.TextColor3 = Color3.fromRGB(200, 200, 200)
+    Entry.Font = Enum.Font.Code
+    Entry.TextSize = 10
+    Entry.TextXAlignment = Enum.TextXAlignment.Left
+    Entry.TextYAlignment = Enum.TextYAlignment.Top
+    Entry.TextWrapped = true -- Wrap logic for preview
+    Entry.Parent = HistoryFrame
+    
+    -- Custom Padding inside history button
+    local HPadd = Instance.new("UIPadding")
+    HPadd.PaddingLeft = UDim.new(0, 5)
+    HPadd.PaddingTop = UDim.new(0, 5)
+    HPadd.Parent = Entry
+    
+    local ECorn = Instance.new("UICorner")
+    ECorn.Parent = Entry
+
+    Entry.MouseButton1Click:Connect(function()
+        InputBox.Text = code
+        -- Switch Tabs
+        IsHistoryView = false
+        HistoryFrame.Visible = false
+        ClearLogsBtn.Visible = false
+        EditorContainer.Visible = true
+        HistoryTabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        HistoryTabBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+        EditorTabBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+        EditorTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+    
+    HistoryFrame.CanvasSize = UDim2.new(0, 0, 0, HistoryList.AbsoluteContentSize.Y)
+end
+
+local function ExecuteCode(times)
+    local code = InputBox.Text
+    local func = loadstring(code)
+    
+    if not func then
+        ExecuteBtn.Text = "SYNTAX ERR"
+        task.wait(1)
+        ExecuteBtn.Text = "RUN"
+        return
+    end
+    
+    AddHistory(code)
+    
+    for i = 1, times do
+        task.spawn(func)
+    end
+    
+    ExecuteBtn.Text = "SUCCESS"
+    task.wait(0.5)
+    ExecuteBtn.Text = "RUN"
+end
+
+-- // CONNECTIONS \\ --
+
+ExecuteBtn.MouseButton1Click:Connect(function() ExecuteCode(1) end)
+SpamBtn.MouseButton1Click:Connect(function() ExecuteCode(10) end)
+ClearTxtBtn.MouseButton1Click:Connect(function() InputBox.Text = "" end)
+
+-- Clear Logs Logic
+ClearLogsBtn.MouseButton1Click:Connect(function()
+    for _, v in pairs(HistoryFrame:GetChildren()) do
+        if v:IsA("TextButton") then v:Destroy() end
+    end
+    HistoryData = {}
+    HistoryFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+end)
+
+-- Tabs
+EditorTabBtn.MouseButton1Click:Connect(function()
+    EditorContainer.Visible = true
+    HistoryFrame.Visible = false
+    ClearLogsBtn.Visible = false
+    EditorTabBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+    EditorTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    HistoryTabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    HistoryTabBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+end)
+
+HistoryTabBtn.MouseButton1Click:Connect(function()
+    EditorContainer.Visible = false
+    HistoryFrame.Visible = true
+    ClearLogsBtn.Visible = true
+    HistoryTabBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+    HistoryTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    EditorTabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    EditorTabBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+end)
+
+-- Hide/Show
+HideBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    OpenBtn.Visible = true
+end)
+
+OpenBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = true
+    OpenBtn.Visible = false
+end)
+
+CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
