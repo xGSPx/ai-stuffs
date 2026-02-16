@@ -1,0 +1,156 @@
+-- [[ SETTINGS ]] --
+local SETTINGS = {
+    TPWalkSpeed = 20, -- 1.25x of 16 WalkSpeed
+    ClaimPos = Vector3.new(-48, 12, -128),
+    ValidRarities = {"OG", "God", "Secret"},
+    ValidVariants = {"Rainbow", "Galaxy", "Hacker"}
+}
+
+local RunService = game:GetService("RunService")
+local player = game.Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
+
+local Toggles = {TPWalkClaim = false, EliteAura = false}
+local TPWalkLoop = nil
+
+-- 1. UI RE-ORGANIZATION (Optimized for Mobile)
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 220, 0, 240)
+Main.Position = UDim2.new(0.5, -110, 0.15, 0)
+Main.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+Main.BorderSizePixel = 0
+Main.Active = true Main.Draggable = true
+Instance.new("UICorner", Main)
+
+local SidePanel = Instance.new("ScrollingFrame", Main)
+SidePanel.Size = UDim2.new(0, 160, 1, 0)
+SidePanel.Position = UDim2.new(1, 8, 0, 0)
+SidePanel.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+SidePanel.BorderSizePixel = 0
+SidePanel.CanvasSize = UDim2.new(0, 0, 0, 0)
+Instance.new("UICorner", SidePanel)
+local UIList = Instance.new("UIListLayout", SidePanel)
+UIList.Padding = UDim.new(0, 4)
+
+local Header = Instance.new("Frame", Main)
+Header.Size = UDim2.new(1, 0, 0, 35)
+Header.BackgroundColor3 = Color3.fromRGB(120, 0, 255)
+Instance.new("UICorner", Header)
+
+local Title = Instance.new("TextLabel", Header)
+Title.Size = UDim2.new(1, 0, 1, 0)
+Title.Text = "NEXUS V31 | ELITE"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 12
+Title.BackgroundTransparency = 1
+
+-- 2. TPWALK ENGINE (Infinite Yield Style)
+local function startTPWalk(targetPos)
+    if TPWalkLoop then TPWalkLoop:Disconnect() end
+    TPWalkLoop = RunService.Heartbeat:Connect(function(delta)
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp and Toggles.TPWalkClaim then
+            local currentPos = hrp.Position
+            local direction = (targetPos - currentPos).Unit
+            local distance = (targetPos - currentPos).Magnitude
+            
+            if distance > 2 then
+                hrp.CFrame = hrp.CFrame + (direction * SETTINGS.TPWalkSpeed * delta)
+            else
+                Toggles.TPWalkClaim = false
+                TPWalkLoop:Disconnect()
+            end
+        end
+    end)
+end
+
+-- 3. ELITE SCANNER (Deep GUI Path)
+local function scanEliteBrainrots()
+    for _, c in pairs(SidePanel:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+    
+    local folder = workspace:FindFirstChild("Brainrots")
+    if not folder then return end
+    
+    for _, br in pairs(folder:GetChildren()) do
+        pcall(function()
+            local frame = br.Mesh.InfoGui.Frame
+            local rarity = frame.CharRarity.Text
+            local variant = frame.CharVariant.Text
+            local cooldown = frame.Cooldown.TextLabel.Text
+            
+            local isElite = false
+            for _, v in pairs(SETTINGS.ValidVariants) do if variant:find(v) then isElite = true end end
+            for _, r in pairs(SETTINGS.ValidRarities) do if rarity:find(r) then isElite = true end end
+            
+            if isElite then
+                local b = Instance.new("TextButton", SidePanel)
+                b.Size = UDim2.new(1, -10, 0, 40)
+                b.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+                b.Text = variant .. " " .. rarity .. "\n" .. cooldown
+                b.TextColor3 = Color3.new(1, 1, 1)
+                b.TextSize = 9
+                b.Font = Enum.Font.GothamBold
+                Instance.new("UICorner", b)
+                
+                b.MouseButton1Click:Connect(function()
+                    -- Use your InstantTP tool/logic here or standard TP
+                    player.Character.HumanoidRootPart.CFrame = br:GetPivot()
+                end)
+            end
+        end)
+    end
+    SidePanel.CanvasSize = UDim2.new(0, 0, 0, UIList.AbsoluteContentSize.Y + 10)
+end
+
+-- 4. BUTTONS
+local function createBtn(name, pos, callback)
+    local b = Instance.new("TextButton", Main)
+    b.Size = UDim2.new(0.9, 0, 0, 35)
+    b.Position = pos
+    b.Text = name
+    b.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", b)
+    b.MouseButton1Click:Connect(callback)
+    return b
+end
+
+createBtn("TPWALK TO CLAIM", UDim2.new(0.05, 0, 0.2, 0), function()
+    Toggles.TPWalkClaim = true
+    startTPWalk(SETTINGS.ClaimPos)
+end)
+
+local AuraBtn = createBtn("MASS AURA: OFF", UDim2.new(0.05, 0, 0.4, 0), function(self)
+    Toggles.EliteAura = not Toggles.EliteAura
+    -- Button UI handled in loop
+end)
+
+createBtn("REFRESH ELITES", UDim2.new(0.05, 0, 0.6, 0), function()
+    scanEliteBrainrots()
+end)
+
+-- 5. OPTIMIZED AUTO-LOOP
+task.spawn(function()
+    local Remote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("DamageBlockEvent")
+    while true do
+        task.wait(1/7)
+        if Toggles.EliteAura then
+            -- Damage Sammy
+            if workspace:FindFirstChild("HeartbreakerSammyRig") then
+                Remote:FireServer(workspace.HeartbreakerSammyRig)
+            end
+            -- Damage LuckyBlocks
+            local lb = workspace:FindFirstChild("LuckyBlocks")
+            if lb then
+                for _, block in pairs(lb:GetChildren()) do Remote:FireServer(block) end
+            end
+        end
+    end
+end)
+
+-- Auto-Refresh List every 10s
+task.spawn(function() while task.wait(10) do scanEliteBrainrots() end end)
